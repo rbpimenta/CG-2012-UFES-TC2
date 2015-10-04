@@ -15,6 +15,11 @@
 #include <iterator>
 #include <algorithm>
 #include <string>
+#include <math.h>
+
+#include <GL/glut.h>
+#include <GL/glu.h>
+#include <GL/gl.h>
 
 using namespace std;
 using namespace tinyxml2;
@@ -26,7 +31,10 @@ AppSettings::AppSettings() {
 	this->postoAbastecimento = new Rectangle();
 	this->jogador = new Circle();
 
+	this->inimigos = new vector<Circle>();
 	this->quantidadeInimigos = 0;
+	
+	this->objetoResgate = new vector<Circle>();
 	this->quantidadeObjetosResgate = 0;
 }
 
@@ -91,6 +99,8 @@ void AppSettings::loadConfigXML(char** path) {
 
 void AppSettings::loadSvgFile() {
 	XMLDocument* doc = new XMLDocument();
+	
+	cout << "pathArena = " << this->pathArena.data() << "\n";
 
 	doc->LoadFile(this->pathArena.data());
 
@@ -162,7 +172,7 @@ void AppSettings::loadSvgFile() {
 			Circle* enemyCircle = new Circle();
 			enemyCircle->setValues(circleElem);
 			this->checkCircles(enemyCircle);
-			this->inimigos.push_back(*enemyCircle);
+			this->inimigos->push_back(*enemyCircle);
 			this->quantidadeInimigos++;
 		}
 
@@ -170,7 +180,7 @@ void AppSettings::loadSvgFile() {
 			Circle* rescueObjectCircle = new Circle();
 			rescueObjectCircle->setValues(circleElem);
 			this->checkCircles(rescueObjectCircle);
-			this->objetoResgate.push_back(*rescueObjectCircle);
+			this->objetoResgate->push_back(*rescueObjectCircle);
 			this->quantidadeObjetosResgate++;
 		}
 
@@ -190,13 +200,14 @@ void AppSettings::showValues() {
 	this->postoAbastecimento->showValues();
 	this->jogador->showValues();
 
-	vector<Circle>::iterator it;
-	for (it = this->inimigos.begin(); it != this->inimigos.end(); it++) {
+	int i = 0;
+
+	Circle* it = NULL;
+	for (i = 0; i < this->quantidadeInimigos; i ++) {
 		it->showValues();
 	}
 
-	for (it = this->objetoResgate.begin(); it != this->objetoResgate.end();
-			it++) {
+	for (i = 0; i < this->quantidadeObjetosResgate; i ++) {
 		it->showValues();
 	}
 }
@@ -244,6 +255,170 @@ void AppSettings::detectarLimitesArena(float x, float y, float width, float heig
 
 }
 
+void AppSettings::detectarJogador (float x, float y) {
+	detectarCircle(x, y, this->getJogador());
+}
+
+void AppSettings::detectarInimigo (float x, float y) {
+	Circle aux;
+	
+	int i = 0;
+
+	for (i = 0; i < this->quantidadeInimigos; i ++) {
+		aux = this->inimigos->at(i);
+		detectarCircle(x, y, &aux);
+	}
+}
+
+void AppSettings::detectarObjetoResgate (float x, float y) {
+	Circle aux;
+	int i = 0;
+	
+	for (i = 0; i < this->quantidadeObjetosResgate; i ++) {
+		aux = this->objetoResgate->at(i);
+		detectarCircle(x, y, &aux);
+	}
+}
+
+bool internoCircunferencia(float x, float y, Circle* circle) {
+
+	float distX = pow ((circle->getCx() - x), 2.0);
+	float distY = pow ((circle->getCy() - y), 2.0);
+	float rPow2 = pow (circle->getR(), 2.0);
+	float soma = distX + distY;
+
+	if (soma <= rPow2) {
+		return true;
+	}
+
+	return false;
+}
+
+void AppSettings::detectarCircle (float x, float y, Circle* c) {
+	if (internoCircunferencia(x, y, c)) {
+		cout << "id=" << c->getId() << "\n";
+	}
+}
+
+void detectarRectangle (Rectangle* r, float x, float y) {
+	if (x > r->getX()
+		&& x < (r->getX() + r->getWidth())) {
+
+		if (y > r->getY()
+			&& y < (r->getY() + r->getHeight())) {
+
+			cout << "id=" <<  r->getId() << "\n";
+		}
+	}
+
+}
+
+void AppSettings::detectarArena (float x, float y) {
+	detectarRectangle(this->arena, x, y);
+}
+
+void AppSettings::detectarPostoDeAbastecimento (float x, float y) {
+	detectarRectangle(this->postoAbastecimento, x, y);
+}
+
+void AppSettings::detectarObjetos(float x, float y) {
+	//detectarArena (x, y);
+	detectarPostoDeAbastecimento(x, y);
+	detectarJogador(x, y);
+	detectarInimigo(x, y);
+	detectarObjetoResgate(x, y);
+}
+
+void desenharRectangle(Rectangle* r, float R, float G, float B) {
+		glColor3f(R, G, B);
+		glBegin(GL_POLYGON);
+		glVertex3f(r->getX(),
+					r->getY(),
+					0.0);
+		glVertex3f(r->getX() + r->getWidth(),
+					r->getY(),
+					0.0);
+		glVertex3f(r->getX()  + r->getWidth(),
+					r->getY() + r->getHeight(),
+					0.0);
+		glVertex3f(r->getX(),
+					r->getY() + r->getHeight(),
+					0.0);
+	glEnd();
+}
+
+void AppSettings::desenharArena() {
+	desenharRectangle(this->getArena(), 1.0, 1.0, 1.0);
+}
+
+void AppSettings::desenharPostoAbastecimento() {
+	desenharRectangle(this->getPostoAbastecimento(), 0.75, 0.75, 0.75);
+}
+
+void desenharCircle (Circle* c, float R, float G, float B) {
+	int i = 0;
+	int num_segments = 100;
+	float twicePi = 2*M_PI;
+	float radius = c->getR();
+		
+	glColor3f(R, G, B);
+		// Desenhar a parte interna do círculo
+		glBegin(GL_TRIANGLE_FAN); //BEGIN CIRCLE
+		glVertex3f(c->getCx(), c->getCy(), 0.0); // center of circle
+		   for (i = 0; i <= 20; i++)   {
+				glVertex3f (
+					(c->getCx() + (radius * cosf(i * twicePi / 20))),
+					(c->getCy() + (radius * sin(i * twicePi / 20))),
+					0.0);
+			}
+		glEnd();
+
+		// Desenhar a parte da superfície do círculo
+		glBegin(GL_LINE_LOOP);
+			for (i = 0; i < num_segments; i++)   {
+				float theta = 2.0f * 3.1415926f * float(i) / float(num_segments);//get the current angle
+				float x = c->getR() * cosf(theta);//calculate the x component
+				float y = c->getR() * sinf(theta);//calculate the y component
+				glVertex3f(x + c->getCx(),
+							y + c->getCy(),
+							0.0);//output vertex
+			}
+		glEnd();
+	
+}
+
+void AppSettings::desenharJogador() {
+	desenharCircle(this->jogador, 0.0, 1.0, 0.0);
+}
+
+void AppSettings::desenharInimigos() {
+	int j = 0;
+	Circle it;
+	
+	for (j = 0; j < this->getQuantidadeInimigos(); j++) {
+		it = this->getInimigos()->at(j);
+		desenharCircle(&it, 1.0, 0.0, 0.0);
+	}
+}
+
+void AppSettings::desenharObjetosResgate() {
+	int j = 0;
+	Circle it;
+	
+	for (j = 0; j < this->getQuantidadeObjetosResgate(); j++) {
+		it = this->getObjetoResgate()->at(j);
+		desenharCircle(&it, 0.0, 0.0, 1.0);
+	}
+}
+
+void AppSettings::desenharObjetos() {
+	this->desenharArena();
+	this->desenharPostoAbastecimento();
+	this->desenharJogador();
+	this->desenharInimigos();
+	this->desenharObjetosResgate();
+}
+
 // Getters and Setters
 string AppSettings::getPathArena() {
 	return this->pathArena;
@@ -277,11 +452,11 @@ void AppSettings::setJogador(Circle* jogador) {
 	this->jogador = jogador;
 }
 
-vector<Circle> AppSettings::getInimigos() {
+vector<Circle>* AppSettings::getInimigos() {
 	return this->inimigos;
 }
 
-void AppSettings::setInimigos(vector<Circle> inimigos) {
+void AppSettings::setInimigos(vector<Circle>* inimigos) {
 	this->inimigos = inimigos;
 }
 
@@ -293,11 +468,11 @@ void AppSettings::setQuantidadeInimigos(int quantidadeInimigos) {
 	this->quantidadeInimigos = quantidadeInimigos;
 }
 
-vector<Circle> AppSettings::getObjetoResgate() {
+vector<Circle>* AppSettings::getObjetoResgate() {
 	return this->objetoResgate;
 }
 
-void AppSettings::setObjetoResgate(vector<Circle> objetoResgate) {
+void AppSettings::setObjetoResgate(vector<Circle>* objetoResgate) {
 	this->objetoResgate = objetoResgate;
 }
 
